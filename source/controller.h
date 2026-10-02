@@ -36,6 +36,7 @@ public:
 	int scaleIndex ();
 	void rollDice ();
 	int rootNote ();
+	bool previewOn () { return plainValue (kPreview) > 0.5; }
 	std::string exportRiff (); // writes the current riff as .mid; returns its path or "" on failure
 	void addLiveView (VSTGUI::CView* view) { liveViews.push_back (view); }
 	void removeLiveView (VSTGUI::CView* view);

@@ -90,9 +90,10 @@ void PatternView::draw (CDrawContext* context)
 	context->setFontColor (kTextDim);
 	context->drawString (caption, CRect (bounds.left + 14, bounds.top + 6, bounds.right - 14, bounds.top + 22),
 	                     kLeftText);
+	// Status sits left of the Preview controls that the layout overlays in the top-right corner.
+	const char* status = playhead >= 0 ? "PLAYING" : (controller->previewOn () ? "PRESS PLAY" : "HOLD A KEY");
 	context->setFontColor (playhead >= 0 ? kCyan : kTextDim);
-	context->drawString (playhead >= 0 ? "PLAYING" : "HOLD A KEY",
-	                     CRect (bounds.left + 14, bounds.top + 6, bounds.right - 14, bounds.top + 22),
+	context->drawString (status, CRect (bounds.left + 14, bounds.top + 6, bounds.right - 196, bounds.top + 22),
 	                     kRightText);
 
 	CRect grid (bounds.left + 12, bounds.top + 26, bounds.right - 12, bounds.bottom - 10);

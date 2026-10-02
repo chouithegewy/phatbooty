@@ -413,6 +413,8 @@ public:
 	// Last key the groove was transposed to (for exporting riffs in the right key).
 	int rootNote () const { return numHeld > 0 ? held[numHeld - 1].pitch : lastRoot; }
 
+	bool previewing () const { return previewActive (); }
+
 	int numMidiOut () const { return numMidiEvents; }
 	const MidiEvent& midiOut (int i) const { return midiEvents[i]; }
 
@@ -432,6 +434,20 @@ public:
 			internalPpq = lastPpq; // keep grooving from where the host stopped
 		blockPos = 0;
 		numMidiEvents = 0;
+		eventSample = 0;
+
+		// Preview: run the groove with the transport while no key is held.
+		if (numHeld == 0)
+		{
+			if (previewActive () && !seqRunning)
+				startSequencer ();
+			else if (!previewActive () && seqRunning)
+			{
+				seqRunning = false;
+				gateOpen = false;
+				releaseNote ();
+			}
+		}
 	}
 
 	void noteOn (int pitch, float velocity)
@@ -446,7 +462,7 @@ public:
 
 		if (grooveOn ())
 		{
-			if (wasEmpty)
+			if (wasEmpty && !seqRunning)
 				startSequencer ();
 		}
 		else
@@ -460,7 +476,7 @@ public:
 		const bool wasTop = numHeld > 0 && held[numHeld - 1].pitch == pitch;
 		removeHeld (pitch);
 		eventSample = blockPos;
-		if (numHeld == 0)
+		if (numHeld == 0 && !previewActive ())
 		{
 			seqRunning = false;
 			gateOpen = false;
@@ -551,6 +567,8 @@ private:
 	static constexpr int kMaxHeld = 16;
 
 	bool grooveOn () const { return plain[kGrooveOn] > 0.5; }
+	bool previewActive () const { return grooveOn () && plain[kPreview] > 0.5 && transport.playing; }
+	int previewRoot () const { return kPreviewRootLowest + static_cast<int> (plain[kPreviewRoot]); }
 	double swing () const { return plain[kSwing] / 100.; }
 
 	// Plays a note on the voice and mirrors it to MIDI out. Legato notes overlap the previous one
@@ -587,7 +605,7 @@ private:
 		gateOpen = false;
 		eventSample = blockPos;
 		releaseNote ();
-		if (numHeld > 0 && grooveOn ())
+		if ((numHeld > 0 && grooveOn ()) || previewActive ())
 			startSequencer ();
 	}
 
@@ -636,7 +654,8 @@ private:
 		const int len = pattern.length;
 		const int pos = static_cast<int> (((idx % len) + len) % len);
 		const Step& st = pattern.steps[pos];
-		if (!st.on || numHeld == 0)
+		const bool haveRoot = numHeld > 0 || previewActive ();
+		if (!st.on || !haveRoot)
 		{
 			if (gateOpen)
 				releaseNote ();
@@ -644,7 +663,9 @@ private:
 			return;
 		}
 
-		const int note = std::clamp (held[numHeld - 1].pitch + st.semis, 0, 127);
+		const int root = numHeld > 0 ? held[numHeld - 1].pitch : previewRoot ();
+		lastRoot = root;
+		const int note = std::clamp (root + st.semis, 0, 127);
 		const float vel = st.ghost ? 0.3f : (st.accent ? 1.f : 0.7f);
 		const bool legato = prevSlide && gateOpen;
 		playNote (note, vel, st.accent, legato);

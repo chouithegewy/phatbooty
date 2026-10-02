@@ -21,6 +21,7 @@
 	</colors>
 	<gradients>
 		<gradient name="ButtonOff"><color-stop rgba="#2b1a3dff" start="0"/><color-stop rgba="#1b0f27ff" start="1"/></gradient>
+		<gradient name="ButtonOnCyan"><color-stop rgba="#8ff3ffff" start="0"/><color-stop rgba="#3dc8e8ff" start="1"/></gradient>
 		<gradient name="ButtonOn"><color-stop rgba="#ffc85aff" start="0"/><color-stop rgba="#ff8a1eff" start="1"/></gradient>
 	</gradients>
 	<control-tags>
@@ -45,6 +46,8 @@
 		<control-tag name="P::Drive" tag="18"/>
 		<control-tag name="P::Glide" tag="19"/>
 		<control-tag name="P::Volume" tag="20"/>
+		<control-tag name="P::Preview" tag="21"/>
+		<control-tag name="P::PreviewRoot" tag="22"/>
 	</control-tags>
 	<template name="view" class="CViewContainer" origin="0, 0" size="880, 508" minSize="880, 508" maxSize="880, 508" background-color="Bg" transparent="false" mouse-enabled="true">
 		<view class="CTextLabel" origin="22, 12" size="420, 34" mouse-enabled="false" transparent="true" title="PHAT BOOTY BASS" font="Title" font-color="Pink" text-alignment="left" style-no-frame="true" style-no-draw="false"/>
@@ -56,6 +59,8 @@
 		<view class="CView" origin="772, 8" size="60, 60" mouse-enabled="true" transparent="false" custom-view-name="DiceButton"/>
 		<view class="CTextLabel" origin="772, 66" size="60, 12" mouse-enabled="false" transparent="true" title="ROLL" font="Label" font-color="TextDim" text-alignment="center" style-no-frame="true" style-no-draw="false"/>
 		<view class="CView" origin="20, 84" size="840, 150" mouse-enabled="true" transparent="false" custom-view-name="PatternView"/>
+		<view class="CTextButton" origin="684, 88" size="86, 20" mouse-enabled="true" transparent="false" control-tag="P::Preview" title="PREVIEW" kick-style="false" font="Label" text-color="TextDim" text-color-highlighted="Bg" gradient="ButtonOff" gradient-highlighted="ButtonOnCyan" frame-color="PanelEdge" frame-color-highlighted="Cyan" frame-width="1" round-radius="6" text-alignment="center"/>
+		<view class="COptionMenu" origin="776, 88" size="72, 20" mouse-enabled="true" transparent="false" control-tag="P::PreviewRoot" font="Label" font-color="Cyan" back-color="Field" frame-color="PanelEdge" frame-width="1" style-round-rect="true" round-rect-radius="6" menu-popup-style="true" text-alignment="center"/>
 		<view class="CTextLabel" origin="20, 246" size="840, 118" mouse-enabled="false" transparent="false" title="" back-color="Panel" frame-color="PanelEdge" frame-width="1" style-round-rect="true" round-rect-radius="10"/>
 		<view class="CTextLabel" origin="36, 254" size="120, 14" mouse-enabled="false" transparent="true" title="GROOVE" font="Section" font-color="Orange" text-alignment="left" style-no-frame="true" style-no-draw="false"/>
 		<view class="CTextLabel" origin="34, 268" size="72, 14" mouse-enabled="false" transparent="true" title="DENSITY" font="Label" font-color="TextDim" text-alignment="center" style-no-frame="true" style-no-draw="false"/>

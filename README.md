@@ -11,6 +11,8 @@ Roll the dice for a new riff, then drag it straight onto your timeline as MIDI.
   Turning the knobs adds or removes notes without reshuffling the riff.
 - **Host sync:** follows the host's tempo and bar position while the transport plays,
   and keeps its own clock when it's stopped. Change keys mid-groove to transpose.
+- **Preview:** plays the groove whenever the transport runs, in a chosen root key,
+  with no MIDI input needed.
 - **Mono bass voice:** PolyBLEP saw/square, sine sub, 24 dB resonant low-pass with an
   envelope, 303-style accents and slides, drive and glide. Turn Groove off for a plain
   mono synth.
@@ -60,11 +62,17 @@ only been tested on Linux.
 
 ## Using it (REAPER example)
 
-1. Put **Phat Booty Bass** on a track, arm it and hold a low note (MIDI 28–40 sounds best).
-2. Press play: the groove locks to the project tempo. Click the die for a new riff.
-3. Drag **DRAG MIDI** onto the arrange view to drop the riff as a MIDI item.
-4. To record a performance as MIDI, set the track's record mode to
+1. Put **Phat Booty Bass** on a track and open its UI (FX button → select the plug-in).
+2. Turn on **PREVIEW** (top-right of the pattern panel), pick a root note and press
+   play: the groove locks to the project tempo. Click the die for a new riff.
+3. Or leave Preview off and play it: arm the track and hold a low note (MIDI 28–40
+   sounds best), live or as long notes in a MIDI item. The riff follows the key you hold.
+4. Drag **DRAG MIDI** onto the arrange view to drop the riff as a MIDI item.
+5. To record a performance as MIDI, set the track's record mode to
    *Record: output (MIDI)*.
+
+REAPER keeps an already-loaded plug-in in memory, so after rebuilding, restart REAPER
+(or enable *Allow complete unload of VST plug-ins* and re-add the plug-in).
 
 ## Tools
 
