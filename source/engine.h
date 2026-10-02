@@ -348,6 +348,16 @@ public:
 		double tempo = 120.;  // BPM
 	};
 
+	// MIDI mirror of what the voice plays, collected per block for the plug-in's MIDI output.
+	struct MidiEvent
+	{
+		int sampleOffset;
+		int pitch;
+		float velocity;
+		bool on;
+	};
+	static constexpr int kMaxMidiEvents = 256;
+
 	Engine ()
 	{
 		for (int i = 0; i < kNumParams; ++i)
@@ -366,6 +376,8 @@ public:
 	void reset ()
 	{
 		voice.reset ();
+		soundingNote = -1;
+		numMidiEvents = 0;
 		numHeld = 0;
 		seqRunning = false;
 		gateOpen = false;
@@ -398,6 +410,12 @@ public:
 		return static_cast<int> (((lastStep % len) + len) % len);
 	}
 
+	// Last key the groove was transposed to (for exporting riffs in the right key).
+	int rootNote () const { return numHeld > 0 ? held[numHeld - 1].pitch : lastRoot; }
+
+	int numMidiOut () const { return numMidiEvents; }
+	const MidiEvent& midiOut (int i) const { return midiEvents[i]; }
+
 	// Call once per block before render(); sample offsets in noteOn/noteOff/render are block-relative.
 	void beginBlock (const Transport& t)
 	{
@@ -413,6 +431,7 @@ public:
 		if (wasPlaying && !transport.playing)
 			internalPpq = lastPpq; // keep grooving from where the host stopped
 		blockPos = 0;
+		numMidiEvents = 0;
 	}
 
 	void noteOn (int pitch, float velocity)
@@ -422,6 +441,8 @@ public:
 			removeHeld (held[0].pitch);
 		const bool wasEmpty = numHeld == 0;
 		held[numHeld++] = {pitch, velocity};
+		lastRoot = pitch;
+		eventSample = blockPos;
 
 		if (grooveOn ())
 		{
@@ -430,7 +451,7 @@ public:
 		}
 		else
 		{
-			voice.trigger (pitch, velocity, velocity > 0.9f, !wasEmpty, plain[kGlide]);
+			playNote (pitch, velocity, velocity > 0.9f, !wasEmpty);
 		}
 	}
 
@@ -438,16 +459,17 @@ public:
 	{
 		const bool wasTop = numHeld > 0 && held[numHeld - 1].pitch == pitch;
 		removeHeld (pitch);
+		eventSample = blockPos;
 		if (numHeld == 0)
 		{
 			seqRunning = false;
 			gateOpen = false;
-			voice.release ();
+			releaseNote ();
 		}
 		else if (!grooveOn () && wasTop)
 		{
 			const auto& h = held[numHeld - 1];
-			voice.trigger (h.pitch, h.velocity, false, true, plain[kGlide]);
+			playNote (h.pitch, h.velocity, false, true);
 		}
 	}
 
@@ -456,7 +478,8 @@ public:
 		numHeld = 0;
 		seqRunning = false;
 		gateOpen = false;
-		voice.release ();
+		eventSample = blockPos;
+		releaseNote ();
 	}
 
 	// Renders samples [start, end) of the current block. Output is mono duplicated to both channels.
@@ -485,6 +508,7 @@ public:
 					internalPpq += ppqPerSample;
 				}
 				lastPpq = ppq;
+				eventSample = i;
 				tick (ppq);
 			}
 			else if (transport.playing)
@@ -529,11 +553,40 @@ private:
 	bool grooveOn () const { return plain[kGrooveOn] > 0.5; }
 	double swing () const { return plain[kSwing] / 100.; }
 
+	// Plays a note on the voice and mirrors it to MIDI out. Legato notes overlap the previous one
+	// (new note-on before the old note-off) so a receiving mono synth slides too.
+	void playNote (int note, float velocity, bool isAccent, bool legato)
+	{
+		voice.trigger (note, velocity, isAccent, legato, plain[kGlide]);
+		const int prev = soundingNote;
+		if (prev >= 0 && (!legato || prev == note))
+			pushMidi (prev, 0.f, false);
+		pushMidi (note, velocity, true);
+		if (prev >= 0 && legato && prev != note)
+			pushMidi (prev, 0.f, false);
+		soundingNote = note;
+	}
+
+	void releaseNote ()
+	{
+		voice.release ();
+		if (soundingNote >= 0)
+			pushMidi (soundingNote, 0.f, false);
+		soundingNote = -1;
+	}
+
+	void pushMidi (int pitch, float velocity, bool on)
+	{
+		if (numMidiEvents < kMaxMidiEvents)
+			midiEvents[numMidiEvents++] = {eventSample, pitch, velocity, on};
+	}
+
 	void grooveModeChanged ()
 	{
 		seqRunning = false;
 		gateOpen = false;
-		voice.release ();
+		eventSample = blockPos;
+		releaseNote ();
 		if (numHeld > 0 && grooveOn ())
 			startSequencer ();
 	}
@@ -573,7 +626,7 @@ private:
 		}
 		if (gateOpen && !holdGate && ppq >= gateOffPpq)
 		{
-			voice.release ();
+			releaseNote ();
 			gateOpen = false;
 		}
 	}
@@ -586,7 +639,7 @@ private:
 		if (!st.on || numHeld == 0)
 		{
 			if (gateOpen)
-				voice.release ();
+				releaseNote ();
 			gateOpen = holdGate = prevSlide = false;
 			return;
 		}
@@ -594,7 +647,7 @@ private:
 		const int note = std::clamp (held[numHeld - 1].pitch + st.semis, 0, 127);
 		const float vel = st.ghost ? 0.3f : (st.accent ? 1.f : 0.7f);
 		const bool legato = prevSlide && gateOpen;
-		voice.trigger (note, vel, st.accent, legato, plain[kGlide]);
+		playNote (note, vel, st.accent, legato);
 
 		const double start = stepStart (idx);
 		const double end = stepStart (idx + 1);
@@ -640,6 +693,12 @@ private:
 
 	Held held[kMaxHeld];
 	int numHeld = 0;
+	int lastRoot = 33;
+
+	MidiEvent midiEvents[kMaxMidiEvents];
+	int numMidiEvents = 0;
+	int eventSample = 0;   // block-relative sample position for emitted MIDI
+	int soundingNote = -1; // note currently held on MIDI out
 	float lastKeyVel = 1.f;
 
 	Transport transport;

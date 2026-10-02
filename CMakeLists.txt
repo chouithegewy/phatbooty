@@ -23,6 +23,8 @@ smtg_add_vst3plugin(phatbooty
     source/controller.h
     source/engine.h
     source/entry.cpp
+    source/filedrag.h
+    source/midifile.h
     source/params.h
     source/processor.cpp
     source/processor.h
@@ -35,6 +37,14 @@ smtg_add_vst3plugin(phatbooty
 target_compile_features(phatbooty PUBLIC cxx_std_17)
 target_link_libraries(phatbooty PRIVATE sdk vstgui_support)
 smtg_target_add_plugin_resources(phatbooty RESOURCES resource/phatbooty.uidesc)
+
+if(SMTG_LINUX)
+    find_package(X11 REQUIRED)
+    target_sources(phatbooty PRIVATE source/filedrag_x11.cpp)
+    target_link_libraries(phatbooty PRIVATE X11::X11)
+else()
+    target_sources(phatbooty PRIVATE source/filedrag_none.cpp)
+endif()
 smtg_target_configure_version_file(phatbooty)
 
 if(SMTG_MAC)

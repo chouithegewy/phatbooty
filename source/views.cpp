@@ -1,11 +1,15 @@
 #include "views.h"
 #include "controller.h"
 #include "engine.h"
+#include "filedrag.h"
 
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cfont.h"
 #include "vstgui/lib/cgraphicspath.h"
 #include "vstgui/lib/cgraphicstransform.h"
+#include "vstgui/lib/cdropsource.h"
+#include "vstgui/lib/cframe.h"
+#include "vstgui/lib/dragging.h"
 #include "vstgui/lib/events.h"
 
 #include <cstdio>
@@ -264,6 +268,172 @@ void DiceButton::draw (CDrawContext* context)
 		const CCoord y = center.y + (i / 3 - 1) * step;
 		context->drawEllipse (CRect (x - r, y - r, x + r, y + r), kDrawFilled);
 	}
+}
+
+
+//------------------------------------------------------------------------
+MidiDragView::MidiDragView (const CRect& size, Controller* controller)
+: CView (size), controller (controller)
+{
+	setWantsFocus (false);
+	setTooltipText ("Drag onto your DAW timeline to drop this riff as MIDI");
+}
+
+MidiDragView::~MidiDragView () = default;
+
+bool MidiDragView::removed (CView* parent)
+{
+	stopTimer ();
+	drag.reset ();
+	return CView::removed (parent);
+}
+
+void MidiDragView::stopTimer ()
+{
+	if (timer)
+	{
+		timer->stop ();
+		timer = nullptr;
+	}
+}
+
+void MidiDragView::flash (const char* text)
+{
+	status = text;
+	statusFrames = 90; // ~1.5 s at 60 Hz
+	if (!timer)
+	{
+		timer = makeOwned<CVSTGUITimer> (
+		    [this] (CVSTGUITimer*) {
+			    if (drag)
+			    {
+				    drag->poll ();
+				    if (drag->isDone ())
+					    drag.reset ();
+			    }
+			    if (statusFrames > 0 && --statusFrames == 0)
+			    {
+				    status = nullptr;
+				    invalid ();
+			    }
+			    if (!drag && !dragging && statusFrames == 0)
+				    stopTimer ();
+		    },
+		    16, true);
+	}
+	invalid ();
+}
+
+void MidiDragView::onMouseDownEvent (MouseDownEvent& event)
+{
+	if (!event.buttonState.isLeft ())
+		return;
+	pressPos = event.mousePosition;
+	armed = true;
+	event.consumed = true;
+}
+
+void MidiDragView::onMouseMoveEvent (MouseMoveEvent& event)
+{
+	if (!armed || dragging)
+		return;
+	const CPoint d = event.mousePosition - pressPos;
+	if (d.x * d.x + d.y * d.y < 16.)
+		return;
+	startDrag ();
+	event.consumed = true;
+}
+
+void MidiDragView::startDrag ()
+{
+	const std::string path = controller->exportRiff ();
+	if (path.empty ())
+	{
+		armed = false;
+		flash ("ERROR");
+		return;
+	}
+
+	drag = FileDragSource::create ();
+	if (drag)
+	{
+		if (!drag->begin (path))
+		{
+			drag.reset ();
+			armed = false;
+			flash ("ERROR");
+			return;
+		}
+		dragging = true;
+		flash ("DRAGGING");
+		return;
+	}
+
+	// Platforms where VSTGUI has a native drag source
+	armed = false;
+	if (auto* frame = getFrame ())
+	{
+		auto source = CDropSource::create (path.data (), static_cast<uint32_t> (path.size () + 1),
+		                                   IDataPackage::kFilePath);
+		frame->doDrag (DragDescription (source), nullptr);
+	}
+}
+
+void MidiDragView::onMouseUpEvent (MouseUpEvent& event)
+{
+	if (!armed)
+		return;
+	armed = false;
+	event.consumed = true;
+	if (dragging)
+	{
+		dragging = false;
+		drag->drop ();
+		flash ("DROPPED");
+		return;
+	}
+	// Plain click: save the riff so it can be found in the riffs folder.
+	const std::string path = controller->exportRiff ();
+	setTooltipText ((path.empty () ? std::string ("Could not save riff") : "Saved " + path).c_str ());
+	flash (path.empty () ? "ERROR" : "SAVED");
+}
+
+void MidiDragView::onMouseEnterEvent (MouseEnterEvent& event)
+{
+	hovered = true;
+	invalid ();
+	event.consumed = true;
+}
+
+void MidiDragView::onMouseExitEvent (MouseExitEvent& event)
+{
+	hovered = false;
+	invalid ();
+	event.consumed = true;
+}
+
+void MidiDragView::draw (CDrawContext* context)
+{
+	context->setDrawMode (kAntiAliasing);
+	CRect r = getViewSize ();
+	const bool active = hovered || dragging;
+	fillRoundRect (context, r, 8., active ? CColor (61, 232, 255, 40) : CColor (14, 8, 21), &kEdge);
+
+	// Grip: two columns of dots on the left
+	context->setFillColor (active ? kCyan : kTextDim);
+	for (int row = 0; row < 3; ++row)
+		for (int col = 0; col < 2; ++col)
+		{
+			const CCoord x = r.left + 12 + col * 6;
+			const CCoord y = r.getCenter ().y - 6 + row * 6;
+			context->drawEllipse (CRect (x - 1.5, y - 1.5, x + 1.5, y + 1.5), kDrawFilled);
+		}
+
+	CRect text = r;
+	text.left += 22;
+	context->setFont (kNormalFontSmall);
+	context->setFontColor (status ? kOrange : (active ? kCyan : kText));
+	context->drawString (status ? status : "DRAG MIDI", text, kCenterText);
 }
 
 } // namespace PhatBooty

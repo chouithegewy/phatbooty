@@ -5,6 +5,7 @@
 #include "vstgui/lib/cvstguitimer.h"
 
 #include <functional>
+#include <memory>
 
 namespace PhatBooty {
 
@@ -46,6 +47,38 @@ private:
 	int tumbleFace = 1;
 	double angle = 0.;
 	bool hovered = false;
+};
+
+class FileDragSource;
+
+// Drag handle: pull it onto a DAW timeline to drop the current riff as a .mid file.
+// A plain click just saves the file and shows where it went.
+class MidiDragView : public VSTGUI::CView
+{
+public:
+	MidiDragView (const VSTGUI::CRect& size, Controller* controller);
+	~MidiDragView () override;
+
+	void draw (VSTGUI::CDrawContext* context) override;
+	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
+	void onMouseMoveEvent (VSTGUI::MouseMoveEvent& event) override;
+	void onMouseUpEvent (VSTGUI::MouseUpEvent& event) override;
+	void onMouseEnterEvent (VSTGUI::MouseEnterEvent& event) override;
+	void onMouseExitEvent (VSTGUI::MouseExitEvent& event) override;
+	bool removed (VSTGUI::CView* parent) override;
+
+private:
+	void startDrag ();
+	void stopTimer ();
+	void flash (const char* text);
+
+	Controller* controller;
+	std::unique_ptr<FileDragSource> drag;
+	VSTGUI::SharedPointer<VSTGUI::CVSTGUITimer> timer;
+	VSTGUI::CPoint pressPos;
+	bool armed = false, dragging = false, hovered = false;
+	const char* status = nullptr; // short-lived message ("SAVED", "DROPPED")
+	int statusFrames = 0;
 };
 
 } // namespace PhatBooty

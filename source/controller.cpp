@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "midifile.h"
 #include "params.h"
 #include "state.h"
 #include "views.h"
@@ -8,7 +9,10 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <random>
 
 using namespace Steinberg;
@@ -74,6 +78,8 @@ tresult PLUGIN_API Controller::initialize (FUnknown* context)
 
 	parameters.addParameter (STR16 ("Playhead"), nullptr, kPlayheadSteps, 0.,
 	                         ParameterInfo::kIsReadOnly | ParameterInfo::kIsHidden, kPlayhead);
+	parameters.addParameter (STR16 ("Root Note"), nullptr, 127, 33. / 127.,
+	                         ParameterInfo::kIsReadOnly | ParameterInfo::kIsHidden, kRootNote);
 	return kResultOk;
 }
 
@@ -125,6 +131,8 @@ VSTGUI::CView* Controller::createCustomView (VSTGUI::UTF8StringPtr name, const V
 		return new PatternView (rect, this);
 	if (view == "DiceButton")
 		return new DiceButton (rect, this);
+	if (view == "MidiDragView")
+		return new MidiDragView (rect, this);
 	return nullptr;
 }
 
@@ -163,6 +171,44 @@ void Controller::rollDice ()
 	setParamNormalized (kSeed, value);
 	performEdit (kSeed, value);
 	endEdit (kSeed);
+}
+
+int Controller::rootNote ()
+{
+	return static_cast<int> (getParamNormalized (kRootNote) * 127. + 0.5);
+}
+
+std::string Controller::exportRiff ()
+{
+	namespace fs = std::filesystem;
+	static const char* noteNames[] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
+
+	fs::path dir;
+	if (const char* xdg = std::getenv ("XDG_DATA_HOME"); xdg && *xdg)
+		dir = fs::path (xdg) / "PhatBooty" / "riffs";
+	else if (const char* home = std::getenv ("HOME"); home && *home)
+		dir = fs::path (home) / ".local" / "share" / "PhatBooty" / "riffs";
+	else if (const char* profile = std::getenv ("USERPROFILE"); profile && *profile)
+		dir = fs::path (profile) / "Documents" / "PhatBooty" / "riffs";
+	else
+		dir = fs::temp_directory_path () / "PhatBooty";
+
+	std::error_code ec;
+	fs::create_directories (dir, ec);
+	if (ec)
+		return {};
+
+	std::string scale = kScaleNames[scaleIndex ()];
+	scale.erase (std::remove (scale.begin (), scale.end (), ' '), scale.end ());
+	const int root = rootNote ();
+	const std::string name = "PhatBooty_" + std::string (noteNames[root % 12]) + "_" + scale + "_seed" +
+	                         std::to_string (seed ());
+	const fs::path path = dir / (name + ".mid");
+
+	const auto bytes = buildMidiFile (currentPattern (), root, plainValue (kSwing) / 100., name);
+	std::ofstream out (path, std::ios::binary);
+	out.write (reinterpret_cast<const char*> (bytes.data ()), static_cast<std::streamsize> (bytes.size ()));
+	return out ? path.string () : std::string ();
 }
 
 void Controller::removeLiveView (VSTGUI::CView* view)

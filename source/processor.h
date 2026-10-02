@@ -34,6 +34,7 @@ private:
 
 	Engine engine;
 	int lastReportedStep = -1;
+	int lastReportedRoot = -1;
 };
 
 } // namespace PhatBooty

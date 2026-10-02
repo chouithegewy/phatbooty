@@ -6,6 +6,7 @@
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include "vstgui/uidescription/uiattributes.h"
 
+#include <string>
 #include <vector>
 
 namespace PhatBooty {
@@ -34,6 +35,8 @@ public:
 	int seed ();
 	int scaleIndex ();
 	void rollDice ();
+	int rootNote ();
+	std::string exportRiff (); // writes the current riff as .mid; returns its path or "" on failure
 	void addLiveView (VSTGUI::CView* view) { liveViews.push_back (view); }
 	void removeLiveView (VSTGUI::CView* view);
 

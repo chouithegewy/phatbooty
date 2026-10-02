@@ -30,7 +30,9 @@ enum ParamIds : int
 	kNumParams,
 
 	// Read-only output (not saved): current pattern step + 1, scaled by 1/kPlayheadSteps; 0 = idle.
-	kPlayhead = 100
+	kPlayhead = 100,
+	// Read-only output (not saved): last key the groove was played in, as pitch / 127.
+	kRootNote = 101
 };
 
 inline constexpr int kPlayheadSteps = 64;

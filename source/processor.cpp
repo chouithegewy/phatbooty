@@ -26,6 +26,7 @@ tresult PLUGIN_API Processor::initialize (FUnknown* context)
 
 	addAudioOutput (STR16 ("Stereo Out"), SpeakerArr::kStereo);
 	addEventInput (STR16 ("Event In"), 1);
+	addEventOutput (STR16 ("MIDI Out"), 1);
 	return kResultOk;
 }
 
@@ -139,17 +140,44 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
 
 	out.silenceFlags = 0;
 
-	// Tell the UI where the playhead is.
-	const int step = engine.currentStep ();
-	if (step != lastReportedStep && data.outputParameterChanges)
+	// Mirror every played note to the MIDI output bus.
+	if (auto* outEvents = data.outputEvents)
 	{
-		int32 index;
-		if (auto* queue = data.outputParameterChanges->addParameterData (kPlayhead, index))
+		for (int i = 0; i < engine.numMidiOut (); ++i)
 		{
-			int32 pointIndex;
-			queue->addPoint (0, (step + 1) / static_cast<double> (kPlayheadSteps), pointIndex);
-			lastReportedStep = step;
+			const auto& m = engine.midiOut (i);
+			Event e {};
+			e.busIndex = 0;
+			e.sampleOffset = std::clamp (m.sampleOffset, 0, data.numSamples - 1);
+			if (m.on)
+			{
+				e.type = Event::kNoteOnEvent;
+				e.noteOn = {0, static_cast<int16> (m.pitch), 0.f, m.velocity, 0, -1};
+			}
+			else
+			{
+				e.type = Event::kNoteOffEvent;
+				e.noteOff = {0, static_cast<int16> (m.pitch), 0.f, -1, 0.f};
+			}
+			outEvents->addEvent (e);
 		}
+	}
+
+	// Tell the UI where the playhead is and which key we're in.
+	if (auto* outParams = data.outputParameterChanges)
+	{
+		auto report = [&] (ParamID id, ParamValue value) {
+			int32 index, pointIndex;
+			if (auto* queue = outParams->addParameterData (id, index))
+				return queue->addPoint (0, value, pointIndex) == kResultTrue;
+			return false;
+		};
+		const int step = engine.currentStep ();
+		if (step != lastReportedStep && report (kPlayhead, (step + 1) / static_cast<double> (kPlayheadSteps)))
+			lastReportedStep = step;
+		const int root = engine.rootNote ();
+		if (root != lastReportedRoot && report (kRootNote, root / 127.))
+			lastReportedRoot = root;
 	}
 	return kResultOk;
 }

@@ -1,7 +1,9 @@
 // Offline renderer: holds a key, runs the groove engine and writes a 16-bit stereo WAV.
 // Usage: phatbooty_render out.wav [bars=4] [bpm=100] [note=33] [Param=value ...]
 //   Param names are the parameter names without spaces (e.g. Seed=7 Funk=80 Cutoff=40).
+//   mid=riff.mid also writes the pattern as a MIDI file.
 #include "engine.h"
+#include "midifile.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -76,10 +78,16 @@ int main (int argc, char** argv)
 	engine.setSampleRate (sr);
 	engine.reset ();
 
+	std::string midPath;
 	for (; argi < argc; ++argi)
 	{
 		const char* eq = std::strchr (argv[argi], '=');
 		const std::string key (argv[argi], static_cast<size_t> (eq - argv[argi]));
+		if (key == "mid")
+		{
+			midPath = eq + 1;
+			continue;
+		}
 		bool found = false;
 		for (int id = 0; id < kNumParams; ++id)
 		{
@@ -150,5 +158,19 @@ int main (int argc, char** argv)
 	std::printf ("peak %.3f (%.1f dBFS), rms %.1f dBFS, %zu samples\n", peak, 20 * std::log10 (peak + 1e-9),
 	             20 * std::log10 (rms + 1e-9), out.size ());
 	writeWav (argv[1], out, sr);
+
+	if (!midPath.empty ())
+	{
+		const auto bytes = buildMidiFile (engine.getPattern (), note,
+		                                  engine.getParamNormalized (kSwing) * 0.25 + 0.5, "PhatBooty");
+		FILE* f = std::fopen (midPath.c_str (), "wb");
+		if (!f)
+		{
+			std::perror (midPath.c_str ());
+			return 1;
+		}
+		std::fwrite (bytes.data (), 1, bytes.size (), f);
+		std::fclose (f);
+	}
 	return 0;
 }
